@@ -555,7 +555,7 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
                     depth_im.width - self._min_dist_from_boundary):
                 continue
 
-            # Sample depths.
+            # Sample depths. 采样多个深度，让机械臂到不同的高度（深度）进行抓取。
             for i in range(self._depth_samples_per_grasp):
                 # Get depth in the neighborhood of the center pixel.
                 depth_win = depth_im.data[grasp_center[0] -
