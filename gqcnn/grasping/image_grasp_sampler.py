@@ -350,7 +350,7 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
         ----------
         depth_im : :obj:"perception.DepthImage"
             Depth image to sample from.
-        camera_intr : :obj:`perception.CameraIntrinsics`
+        camera_intr : :obj:`autolab.CameraIntrinsics` 
             Intrinsics of the camera that captured the images.
         num_samples : int
             Number of grasps to sample.
@@ -368,20 +368,20 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
         """
         # Compute edge pixels.
         edge_start = time()
-        depth_im = depth_im.apply(snf.gaussian_filter,
+        depth_im = depth_im.apply(snf.gaussian_filter,  #Create a new image by applying a function to this image's data.
                                   sigma=self._depth_grad_gaussian_sigma)
-        scale_factor = self._rescale_factor
-        depth_im_downsampled = depth_im.resize(scale_factor)
-        depth_im_threshed = depth_im_downsampled.threshold_gradients(
+        scale_factor = self._rescale_factor 
+        depth_im_downsampled = depth_im.resize(scale_factor) #Resize the image.
+        depth_im_threshed = depth_im_downsampled.threshold_gradients( #Creates a new DepthImage by zeroing out all depths where the magnitude of the gradient at that point is greater than grad_thresh.
             self._depth_grad_thresh)
-        edge_pixels = (1.0 / scale_factor) * depth_im_threshed.zero_pixels()
-        edge_pixels = edge_pixels.astype(np.int16)
+        edge_pixels = (1.0 / scale_factor) * depth_im_threshed.zero_pixels() #Return an array of the zero pixels.
+        edge_pixels = edge_pixels.astype(np.int16) #找到所有的大于_depth_grad_thresh的像素点。
 
-        depth_im_mask = depth_im.copy()
+        depth_im_mask = depth_im.copy() 
         if segmask is not None:
             edge_pixels = np.array(
                 [p for p in edge_pixels if np.any(segmask[p[0], p[1]] > 0)])
-            depth_im_mask = depth_im.mask_binary(segmask)
+            depth_im_mask = depth_im.mask_binary(segmask) 
 
         # Re-threshold edges if there are too few.
         if edge_pixels.shape[0] < self._min_num_edge_pixels:
@@ -389,34 +389,34 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
             depth_im_threshed = depth_im.threshold_gradients(
                 self._depth_grad_thresh)
             edge_pixels = depth_im_threshed.zero_pixels()
-            edge_pixels = edge_pixels.astype(np.int16)
-            depth_im_mask = depth_im.copy()
-            if segmask is not None:
+            edge_pixels = edge_pixels.astype(np.int16) #找到所有的大于_depth_grad_thresh的像素点。
+            depth_im_mask = depth_im.copy() # depth_im.resize(scale_factor)
+            if segmask is not None: #如果有segmask，就去除segmask外的edge_pixels，以及深度信息。
                 edge_pixels = np.array([
                     p for p in edge_pixels if np.any(segmask[p[0], p[1]] > 0)
                 ])
                 depth_im_mask = depth_im.mask_binary(segmask)
 
-        num_pixels = edge_pixels.shape[0]
+        num_pixels = edge_pixels.shape[0] #边缘像素的数量
         self._logger.debug("Depth edge detection took %.3f sec" %
                            (time() - edge_start))
         self._logger.debug("Found %d edge pixels" % (num_pixels))
 
         # Compute point cloud.
-        point_cloud_im = camera_intr.deproject_to_image(depth_im_mask)
+        point_cloud_im = camera_intr.deproject_to_image(depth_im_mask) # Deprojects a DepthImage into a PointCloudImage.
 
         # Compute_max_depth.
-        depth_data = depth_im_mask.data[depth_im_mask.data > 0]
-        if depth_data.shape[0] == 0:
+        depth_data = depth_im_mask.data[depth_im_mask.data > 0] #depth_im_mask是指经过mask后的深度图（如果有mask）
+        if depth_data.shape[0] == 0: #失败
             return []
 
-        min_depth = np.min(depth_data) + self._min_depth_offset
-        max_depth = np.max(depth_data) + self._max_depth_offset
+        min_depth = np.min(depth_data) + self._min_depth_offset # Offset from the minimum depth at the grasp center pixel to use in depth sampling
+        max_depth = np.max(depth_data) + self._max_depth_offset 
 
         # Compute surface normals.
         normal_start = time()
-        edge_normals = self._surface_normals(depth_im, edge_pixels)
-        self._logger.debug("Normal computation took %.3f sec" %
+        edge_normals = self._surface_normals(depth_im, edge_pixels) # Return an array of the surface normals at the edge pixels.
+        self._logger.debug("Normal computation took %.3f sec" % 
                            (time() - normal_start))
 
         if visualize:
@@ -457,19 +457,22 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
         if num_pixels == 0:
             return []
 
-        # Form set of valid candidate point pairs.
+        # Form set of valid candidate point pairs. #先找到一部分符合要求的抓取点。
         pruning_start = time()
         max_grasp_width_px = Grasp2D(Point(np.zeros(2)),
                                      0.0,
                                      min_depth,
                                      width=self._gripper_width,
-                                     camera_intr=camera_intr).width_px
-        normal_ip = edge_normals.dot(edge_normals.T)
-        dists = ssd.squareform(ssd.pdist(edge_pixels))
+                                     camera_intr=camera_intr).width_px #计算Returns the width in pixels.
+        normal_ip = edge_normals.dot(edge_normals.T) #ab cos（θ）
+        dists = ssd.squareform(ssd.pdist(edge_pixels)) 
+        #ssd.pdist(edge_pixels)计算每个点距离其他点之间的距离。ssd.squareform 用来把一个向量格式的距离向量转换成一个方阵格式的距离矩阵，反之亦然。
+        #按照12 13.. 23 24...的顺序排列成的一个array
+        #https://blog.csdn.net/qq_20135597/article/details/94212816?utm_medium=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-3.control&depth_1-utm_source=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-3.control
         valid_indices = np.where(
             (normal_ip < -np.cos(np.arctan(self._friction_coef)))
-            & (dists < max_grasp_width_px) & (dists > 0.0))
-        valid_indices = np.c_[valid_indices[0], valid_indices[1]]
+            & (dists < max_grasp_width_px) & (dists > 0.0)) #两个点之间符合force closure，距离小于max_grasp_width，同时两点距离大于零。
+        valid_indices = np.c_[valid_indices[0], valid_indices[1]] #Translates slice objects to concatenation along the second axis.即将valid_indices[1]并到valid_indices[0]后面。
         self._logger.debug("Normal pruning %.3f sec" %
                            (time() - pruning_start))
 
@@ -479,7 +482,7 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
             return []
 
         # Prune out grasps.
-        contact_points1 = edge_pixels[valid_indices[:, 0], :]
+        contact_points1 = edge_pixels[valid_indices[:, 0], :] 
         contact_points2 = edge_pixels[valid_indices[:, 1], :]
         contact_normals1 = edge_normals[valid_indices[:, 0], :]
         contact_normals2 = edge_normals[valid_indices[:, 1], :]
