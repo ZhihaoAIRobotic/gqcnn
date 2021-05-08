@@ -388,7 +388,7 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
             self._logger.info("Too few edge pixels!")
             depth_im_threshed = depth_im.threshold_gradients(
                 self._depth_grad_thresh)
-            edge_pixels = depth_im_threshed.zero_pixels()
+            edge_pixels = depth_im_threshed.zero_pixels()#Return an array of the zero pixels的坐标.
             edge_pixels = edge_pixels.astype(np.int16) #找到所有的大于_depth_grad_thresh的像素点。
             depth_im_mask = depth_im.copy() # depth_im.resize(scale_factor)
             if segmask is not None: #如果有segmask，就去除segmask外的edge_pixels，以及深度信息。
@@ -464,16 +464,16 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
                                      min_depth,
                                      width=self._gripper_width,
                                      camera_intr=camera_intr).width_px #计算Returns the width in pixels.
-        normal_ip = edge_normals.dot(edge_normals.T) #ab cos（θ）
-        dists = ssd.squareform(ssd.pdist(edge_pixels)) 
+        normal_ip = edge_normals.dot(edge_normals.T) #ab cos（θ）是一个对称矩阵
+        dists = ssd.squareform(ssd.pdist(edge_pixels)) # 是一个对称矩阵
         #ssd.pdist(edge_pixels)计算每个点距离其他点之间的距离。ssd.squareform 用来把一个向量格式的距离向量转换成一个方阵格式的距离矩阵，反之亦然。
-        #按照12 13.. 23 24...的顺序排列成的一个array
+        #ssd.pdist先形成距离函数，再由squareform形成一个距离方阵
         #https://blog.csdn.net/qq_20135597/article/details/94212816?utm_medium=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-3.control&depth_1-utm_source=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-3.control
         valid_indices = np.where(
             (normal_ip < -np.cos(np.arctan(self._friction_coef)))
-            & (dists < max_grasp_width_px) & (dists > 0.0)) #两个点之间符合force closure，距离小于max_grasp_width，同时两点距离大于零。
+            & (dists < max_grasp_width_px) & (dists > 0.0)) #两个点之间符合force closure，距离小于max_grasp_width，同时两点距离大于零。np.where对于二维方阵生成的是两个array，是两个配对点的索引
         valid_indices = np.c_[valid_indices[0], valid_indices[1]] #Translates slice objects to concatenation along the second axis.即将valid_indices[1]并到valid_indices[0]后面。
-        self._logger.debug("Normal pruning %.3f sec" %
+        self._logger.debug("Normal pruning %.3f sec" % 
                            (time() - pruning_start))
 
         # Raise exception if no antipodal pairs.
@@ -482,10 +482,10 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
             return []
 
         # Prune out grasps.
-        contact_points1 = edge_pixels[valid_indices[:, 0], :] 
-        contact_points2 = edge_pixels[valid_indices[:, 1], :]
-        contact_normals1 = edge_normals[valid_indices[:, 0], :]
-        contact_normals2 = edge_normals[valid_indices[:, 1], :]
+        contact_points1 = edge_pixels[valid_indices[:, 0], :] # valid_indices：[ [c1x,c1y] [c2x,c2y].. ] valid_indices所有的cnx所对应的那一行 也就是第一个点的坐标
+        contact_points2 = edge_pixels[valid_indices[:, 1], :] # valid_indices：[ [c1x,c1y] [c2x,c2y].. ] valid_indices所有的cny所对应的那一行 也就是第二个点的坐标
+        contact_normals1 = edge_normals[valid_indices[:, 0], :] # 
+        contact_normals2 = edge_normals[valid_indices[:, 1], :] # 
         v = contact_points1 - contact_points2
         v_norm = np.linalg.norm(v, axis=1)
         v = v / np.tile(v_norm[:, np.newaxis], [1, 2])
@@ -504,8 +504,8 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
         num_pairs = antipodal_indices.shape[0]
         if num_pairs == 0:
             return []
-        sample_size = min(self._max_rejection_samples, num_pairs)
-        grasp_indices = np.random.choice(antipodal_indices,
+        sample_size = min(self._max_rejection_samples, num_pairs) #防止采样个数过多造成计算负担，设置一个最大的采样量。
+        grasp_indices = np.random.choice(antipodal_indices, #随机选择一部分抓取
                                          size=sample_size,
                                          replace=False)
         self._logger.debug("Grasp comp took %.3f sec" %
@@ -517,28 +517,28 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
         grasps = []
         while k < sample_size and len(grasps) < num_samples:
             grasp_ind = grasp_indices[k]
-            p1 = contact_points1[grasp_ind, :]
-            p2 = contact_points2[grasp_ind, :]
+            p1 = contact_points1[grasp_ind, :] #第一个点的坐标
+            p2 = contact_points2[grasp_ind, :] #第二个点的坐标
             n1 = contact_normals1[grasp_ind, :]
             n2 = contact_normals2[grasp_ind, :]
             #            width = np.linalg.norm(p1 - p2)
             k += 1
 
             # Compute center and axis.
-            grasp_center = (p1 + p2) // 2
-            grasp_axis = p2 - p1
+            grasp_center = (p1 + p2) // 2 #一个抓取的中心
+            grasp_axis = p2 - p1 
             grasp_axis = grasp_axis / np.linalg.norm(grasp_axis)
             grasp_theta = np.pi / 2
             if grasp_axis[1] != 0:
-                grasp_theta = np.arctan2(grasp_axis[0], grasp_axis[1])
+                grasp_theta = np.arctan2(grasp_axis[0], grasp_axis[1])#一个抓取的轴角
             grasp_center_pt = Point(np.array(
                 [grasp_center[1], grasp_center[0]]),
-                                    frame=camera_intr.frame)
+                                    frame=camera_intr.frame) 
 
-            # Compute grasp points in 3D.
+            # Compute grasp points in 3D.只是为了确定两点距离小于夹爪宽度
             x1 = point_cloud_im[p1[0], p1[1]]
             x2 = point_cloud_im[p2[0], p2[1]]
-            if np.linalg.norm(x2 - x1) > self._gripper_width:
+            if np.linalg.norm(x2 - x1) > self._gripper_width: 
                 continue
 
             # Perturb.
@@ -549,7 +549,7 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
                 grasp_theta = grasp_theta + ss.norm.rvs(
                     scale=self._grasp_angle_sigma)
 
-            # Check center px dist from boundary.
+            # Check center px dist from boundary. 检查抓取中心是否在工作空间内
             if (grasp_center[0] < self._min_dist_from_boundary
                     or grasp_center[1] < self._min_dist_from_boundary
                     or grasp_center[0] >
