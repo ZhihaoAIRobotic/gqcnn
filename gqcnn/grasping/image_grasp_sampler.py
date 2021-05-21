@@ -566,6 +566,7 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
             depth_p1 = depth_im[p1[0],p1[1]]
             depth_p2 = depth_im[p2[0],p2[1]]
             depth_grasp = (depth_p1+depth_p2)/2
+            depth_grasp = depth_grasp[0]
             candidate_grasp = Grasp2D(grasp_center_pt,
                                       grasp_theta,
                                       depth_grasp,
