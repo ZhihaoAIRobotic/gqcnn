@@ -29,6 +29,9 @@ Author
 ------
 Jeff Mahler & Sherdil Niyaz
 """
+'''
+将随机采样抓取深度，改为取接触点深度的平均值作为抓取深度。
+'''
 from abc import ABC, abstractmethod
 import random
 from time import time
@@ -523,7 +526,8 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
             n2 = contact_normals2[grasp_ind, :]
             #            width = np.linalg.norm(p1 - p2)
             k += 1
-
+            depth_p1 = depth_im[p1[0],p1[1]]
+            depth_p2 = depth_im[p2[0],p2[1]]
             # Compute center and axis.
             grasp_center = (p1 + p2) // 2 #一个抓取的中心
             grasp_axis = p2 - p1 
@@ -557,8 +561,20 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
                     or grasp_center[1] >
                     depth_im.width - self._min_dist_from_boundary):
                 continue
-
-            # Sample depths. 采样多个深度，让机械臂到不同的高度（深度）进行抓取。
+            
+            
+            depth_p1 = depth_im[p1[0],p1[1]]
+            depth_p2 = depth_im[p2[0],p2[1]]
+            depth_grasp = (depth_p1+depth_p2)/2
+            candidate_grasp = Grasp2D(grasp_center_pt,
+                                      grasp_theta,
+                                      depth_grasp,
+                                      width=self._gripper_width,
+                                      camera_intr=camera_intr,
+                                      contact_points=[p1, p2],
+                                      contact_normals=[n1, n2])
+            grasps.append(candidate_grasp)
+            '''
             for i in range(self._depth_samples_per_grasp):
                 # Get depth in the neighborhood of the center pixel.
                 depth_win = depth_im.data[grasp_center[0] -
@@ -591,7 +607,7 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
                     vis.show()
 
                 grasps.append(candidate_grasp)
-
+        '''
         # Return sampled grasps.
         self._logger.debug("Loop took %.3f sec" % (time() - sample_start))
         return grasps
