@@ -372,9 +372,9 @@ class AntipodalDepthImageGraspSampler(ImageGraspSampler):
         # Compute edge pixels.
         edge_start = time()
         depth_im = depth_im.apply(snf.gaussian_filter,  #Create a new image by applying a function to this image's data.
-                                  sigma=self._depth_grad_gaussian_sigma)
+                                  sigma=self._depth_grad_gaussian_sigma) #这里会造成失真，最好用copy
         scale_factor = self._rescale_factor 
-        depth_im_downsampled = depth_im.resize(scale_factor) #Resize the image.
+        depth_im_downsampled = depth_im.resize(scale_factor) #Resize the image.#这里会造成失真，最好用copy
         depth_im_threshed = depth_im_downsampled.threshold_gradients( #Creates a new DepthImage by zeroing out all depths where the magnitude of the gradient at that point is greater than grad_thresh.
             self._depth_grad_thresh)
         edge_pixels = (1.0 / scale_factor) * depth_im_threshed.zero_pixels() #Return an array of the zero pixels.
